@@ -1,0 +1,151 @@
+/*
+
+*/
+
+-- Create table to populate crom csv
+CREATE table nashville_housing (
+	UniqueID int,
+	ParcelID varchar(500),
+	LandUse varchar(500),
+	PropertyAddress varchar(500),
+	SaleDate date,
+	SalePrice varchar(500),
+	LegalReference varchar(500),
+	SoldAsVacant varchar(500),
+	OwnerName varchar(500),
+	OwnerAddress varchar(500),
+	Acreage float8,
+	TaxDistrict varchar(500),
+	LandValue int,
+	BuildingValue int,
+	TotalValue int,
+	YearBuilt int,
+	Bedrooms int,
+	FullBath int,
+	HalfBath int
+);
+
+-- 1. Populate propertyaddress, using the information: when parcelid is the same, then propertyaddress is the same
+-- To check null values
+select *
+from nashville_housing
+where propertyaddress is null
+order by parcelid;
+
+-- To present the columns we will be using. The last column replaces null values in a.propertyaddress with values in b.propertyaddress. 
+select a.parcelid, a.propertyaddress, b.parcelid, b.propertyaddress, coalesce(a.propertyaddress,b.propertyaddress) 
+from nashville_housing a
+join nashville_housing b
+	on a.parcelid = b.parcelid
+	and a.uniqueid <> b.uniqueid
+where a.propertyaddress is null;
+
+-- Finally we use the last column we generated to populate propertyaddress
+update nashville_housing
+set propertyaddress = coalesce(a.propertyaddress,b.propertyaddress)
+from nashville_housing a
+join nashville_housing b
+	on a.parcelid = b.parcelid
+	and a.uniqueid <> b.uniqueid
+where a.propertyaddress is null;
+
+-- We can check that there are now no null values
+select *
+from nashville_housing
+where propertyaddress is null
+order by parcelid;
+
+
+-- 2. Separating propertyaddress into address, city, state
+select
+-- finds the first comma and selects everything before it
+substring(propertyaddress, 1, strpos(propertyaddress,',')-1) as Address,
+-- from the comma onwards, we have the city
+substring(propertyaddress, strpos(propertyaddress,',')+2, char_length(propertyaddress)) as City
+from nashville_housing
+
+-- Now we insert them as new columns
+alter table nashville_housing
+add propertysplitaddress varchar(500);
+
+update nashville_housing
+set propertysplitaddress = substring(propertyaddress, 1, strpos(propertyaddress,',')-1);
+
+alter table nashville_housing
+add propertysplitcity varchar(500);
+
+update nashville_housing
+set propertysplitcity = substring(propertyaddress, strpos(propertyaddress,',')+2, char_length(propertyaddress));
+
+-- We can see that they have been added at the end of the table
+select * from nashville_housing
+
+
+-- We now do the same for owneraddress, but with a different method
+select
+split_part(owneraddress, ', ', 1),
+split_part(owneraddress, ', ', 2),
+split_part(owneraddress, ', ', 3)
+from nashville_housing
+
+-- Knowing wich formula to use, we update the table accordingly
+alter table nashville_housing
+add ownersplitaddress varchar(500);
+
+update nashville_housing
+set ownersplitaddress = split_part(owneraddress, ', ', 1);
+
+alter table nashville_housing
+add ownersplitcity varchar(500);
+
+update nashville_housing
+set ownersplitcity = split_part(owneraddress, ', ', 2);
+
+alter table nashville_housing
+add ownersplitstate varchar(500);
+
+update nashville_housing
+set ownersplitstate = split_part(owneraddress, ', ', 3);
+
+
+-- 3. We will now homogenize the data in soldasvacant, that appears as Y, N, Yes, No
+select distinct soldasvacant, count(soldasvacant)
+from nashville_housing
+group by soldasvacant
+order by 2;
+
+select soldasvacant,
+		case when soldasvacant = 'Y' then 'Yes'
+			 when soldasvacant = 'N' then 'No'
+			 else soldasvacant
+		end
+from nashville_housing
+order by 1
+
+update nashville_housing
+set soldasvacant = 
+		case when soldasvacant = 'Y' then 'Yes'
+					 when soldasvacant = 'N' then 'No'
+					 else soldasvacant
+		end
+
+-- 4. Removing duplicates using a common table expression (cte)
+with rownumcte as (
+	select *, row_number() over (
+				 partition by parcelid,
+							  saleprice,
+							  saledate,
+							  legalreference
+				 order by uniqueid) row_num
+	from nashville_housing
+) delete from rownumcte
+where row_num > 1; 
+ 
+-- 5. Delete some unused columns
+alter table nashville_housing
+drop column owneraddress
+
+alter table nashville_housing
+drop column propertyaddress;
+
+select * from nashville_housing
