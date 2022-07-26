@@ -1,8 +1,8 @@
-# nashville_housing
+# Nashville Housing
 
-Analysis of public dataset of housing in Nashville.
+## Analysis of public dataset of housing in Nashville.
 
-SQL
+### SQL
 - Creation of database in PostgreSQL
 - Data cleaning
 - Inicial analysis
